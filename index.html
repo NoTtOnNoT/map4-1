@@ -166,19 +166,23 @@
         let map, tempMarker, selectedLocation = null;
 
         function initMap() {
-            map = L.map('map', { zoomControl: false }).setView([13.7563, 100.5018], 10);
-            
-            // Satellite Layer
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '© Esri'
-            }).addTo(map);
+    // 1. ปรับ maxZoom ให้เป็น 20 หรือ 21 (ปกติเว็บทั่วไปจะหยุดแค่ 18)
+    map = L.map('map', { 
+        zoomControl: false,
+        maxZoom: 21 
+    }).setView([13.7563, 100.5018], 10);
+    
+    // 2. ใช้ Google Hybrid Layer (ภาพดาวเทียม + ชื่อถนน) แบบ Direct Link
+    // s=m (Map), s=h (Labels), s=p (Terrain), s=s (Satellite), s=y (Hybrid)
+    L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 21,
+        subdomains:['mt0','mt1','mt2','mt3'],
+        attribution: '© Google Maps'
+    }).addTo(map);
 
-            // Labels Layer
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png').addTo(map);
-
-            map.on('click', (e) => updateTempMarker(e.latlng));
-            loadMarkers();
-        }
+    map.on('click', (e) => updateTempMarker(e.latlng));
+    loadMarkers();
+}
 
         function getLocation() {
             const status = document.getElementById("status");
@@ -235,6 +239,20 @@
         }
 
         initMap();
+
+        // สร้าง Layer แผนที่ปกติ
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+// สร้าง Layer ดาวเทียม
+const satLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}');
+
+const baseMaps = {
+    "แผนที่ถนน": streetLayer,
+    "ภาพดาวเทียม": satLayer
+};
+
+// เพิ่มปุ่มสลับขวาบน
+L.control.layers(baseMaps).addTo(map);
+satLayer.addTo(map); // ให้ดาวเทียมเป็นค่าเริ่มต้น
     </script>
     </body>
 </html>
