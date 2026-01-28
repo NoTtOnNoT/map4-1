@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Classmates Map 4/1 | พิกัดบ้านเพื่อน</title>
+
+        <link rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap"
+            rel="stylesheet">
+        <script src="https://kit.fontawesome.com/your-font-awesome-kit.js"
+            crossorigin="anonymous"></script>
+
+        <style>
+        :root {
+            --primary: #4f46e5;
+            --success: #10b981;
+            --bg: #f8fafc;
+            --glass: rgba(255, 255, 255, 0.9);
+        }
+
+        body { 
+            font-family: 'Kanit', sans-serif; 
+            margin: 0; 
+            background: var(--bg);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Map Container */
+        #map { flex: 1; width: 100%; z-index: 1; }
+
+        /* Floating UI Panel */
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            width: 320px;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            padding: 20px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .header-section h2 { margin: 0 0 5px 0; color: #1e293b; font-size: 1.5rem; }
+        .header-section p { margin: 0 0 15px 0; font-size: 0.9rem; color: #64748b; }
+
+        .form-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        
+        input {
+            padding: 12px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: 0.2s;
+            font-family: 'Kanit';
+        }
+        input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: 'Kanit';
+        }
+        .btn-gps { background: var(--primary); color: white; }
+        .btn-save { background: var(--success); color: white; margin-top: 5px; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+
+        /* Sidebar List */
+        .friend-list {
+            margin-top: 15px;
+            overflow-y: auto;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
+        }
+        .friend-card {
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: 0.2s;
+        }
+        .friend-card:hover { border-color: var(--primary); background: #f1f5f9; }
+        .friend-card strong { display: block; color: #334155; }
+        .friend-card small { color: #94a3b8; font-size: 0.75rem; }
+
+        /* Responsive Mobile */
+        @media (max-width: 480px) {
+            .ui-panel { 
+                top: auto; bottom: 0; left: 0; width: 100%; 
+                border-radius: 20px 20px 0 0; 
+                max-height: 50vh;
+            }
+        }
+    </style>
+    </head>
+    <body>
+
+        <div class="ui-panel">
+            <div class="header-section">
+                <h2>🏠 Class Map 4/1</h2>
+                <p id="status">ยินดีต้อนรับ! ระบุพิกัดบ้านของคุณ</p>
+            </div>
+
+            <div class="form-group">
+                <input type="text" id="username"
+                    placeholder="ชื่อ-นามสกุล ของคุณ">
+                <button class="btn btn-gps" onclick="getLocation()">
+                    📡 ค้นหาตำแหน่งปัจจุบัน
+                </button>
+                <button class="btn btn-save" onclick="saveToFirebase()">
+                    📍 ยืนยันพิกัดบ้าน
+                </button>
+            </div>
+
+            <div class="friend-list" id="friend-list">
+                <div
+                    style="text-align:center; color:#94a3b8; font-size: 0.9rem;">
+                    รายชื่อเพื่อน (<span id="count">0</span>)
+                </div>
+            </div>
+        </div>
+
+        <div id="map"></div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script
+            src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+        <script
+            src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+
+        <script>
+        // --- Firebase Config ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAEvcxON-m_9yJ8HyMYp50Xs1xL0oOFnYg",
+            authDomain: "map4-1.firebaseapp.com",
+            databaseURL: "https://map4-1-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "map4-1",
+            storageBucket: "map4-1.firebasestorage.app",
+            messagingSenderId: "199975656717",
+            appId: "1:199975656717:web:7054b869f016da29eaa444"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let map, tempMarker, selectedLocation = null;
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([13.7563, 100.5018], 10);
+            
+            // Satellite Layer
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri'
+            }).addTo(map);
+
+            // Labels Layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png').addTo(map);
+
+            map.on('click', (e) => updateTempMarker(e.latlng));
+            loadMarkers();
+        }
+
+        function getLocation() {
+            const status = document.getElementById("status");
+            status.innerText = "🌀 กำลังค้นหาตำแหน่ง...";
+            
+            navigator.geolocation.getCurrentPosition((pos) => {
+                const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                map.flyTo(latlng, 18, { duration: 1.5 });
+                updateTempMarker(latlng);
+                status.innerText = "✅ พบตำแหน่งแล้ว! กรุณาใส่ชื่อ";
+            }, () => {
+                alert("เข้าถึงพิกัดไม่ได้ กรุณาเปิด GPS และอนุญาตสิทธิ์");
+                status.innerText = "❌ ระบุพิกัดล้มเหลว";
+            }, { enableHighAccuracy: true });
+        }
+
+        function updateTempMarker(latlng) {
+            if (tempMarker) map.removeLayer(tempMarker);
+            tempMarker = L.marker(latlng, { draggable: true }).addTo(map);
+            selectedLocation = latlng;
+        }
+
+        function saveToFirebase() {
+            const name = document.getElementById("username").value.trim();
+            if (!name || !selectedLocation) return alert("กรุณาระบุชื่อและพิกัดบนแผนที่!");
+
+            const data = {
+                name: name,
+                lat: selectedLocation.lat,
+                lng: selectedLocation.lng,
+                timestamp: new Date().toLocaleTimeString('th-TH')
+            };
+
+            db.ref("locations/").push(data).then(() => {
+                document.getElementById("username").value = "";
+                if (tempMarker) map.removeLayer(tempMarker);
+                alert("บันทึกสำเร็จ! ขอบคุณที่ร่วมสนุก");
+            });
+        }
+
+        function loadMarkers() {
+            const list = document.getElementById("friend-list");
+            db.ref("locations/").on("child_added", (snap) => {
+                const v = snap.val();
+                const m = L.marker([v.lat, v.lng]).addTo(map).bindPopup(`<b>${v.name}</b>`);
+                
+                const card = document.createElement("div");
+                card.className = "friend-card";
+                card.innerHTML = `<strong>${v.name}</strong><small>บันทึกเมื่อ ${v.timestamp}</small>`;
+                card.onclick = () => { map.flyTo([v.lat, v.lng], 18); m.openPopup(); };
+                list.insertBefore(card, list.firstChild.nextSibling);
+                document.getElementById("count").innerText = list.children.length - 1;
+            });
+        }
+
+        initMap();
+    </script>
+    </body>
+</html>
